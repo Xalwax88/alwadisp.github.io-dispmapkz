@@ -181,10 +181,12 @@
 
         // Добавление маркера остановки с кнопками
         function addStopMarker(stop, index) {
+            let directionText = (stop.direction === 0) ? 'Прямое' : 'Обратное';  // Определяем направление
+
             let marker = L.marker([stop.lat, stop.lng]).addTo(drawnItems);
 
             let popupContent = `<b>${stop.name}</b><br><b>Маршрут:</b> ${stop.route || "не определен"}<br>
-                                <b>Направление:</b> ${stop.direction || "не определено"}<br>
+                                <b>Направление:</b> ${directionText}<br>
                                 <button onclick="selectStartStop(${index})">Выбрать как начальную</button>
                                 <button onclick="selectEndStop(${index})">Выбрать как конечную</button>
                                 <button onclick="updateStopInfo(${index})">Изменить остановку</button>
@@ -256,7 +258,7 @@
         }
 
         // Сохранение данных в файл
-        function saveDataToFile() {
+       function saveDataToFile(city, route) {
             let geojsonData = {
                 "type": "FeatureCollection",
                 "features": []
@@ -275,7 +277,7 @@
                         })
                     },
                     "properties": {
-                        "route": "27",
+                        "route": line.route || route || "не указан",  // Используем маршрут из данных line
                         "direction": line.direction
                     }
                 };
@@ -295,7 +297,7 @@
                     "properties": {
                         "hintContent": stop.name,
                         "direction": stop.direction,
-                        "route": "27",
+                        "route": stop.route || route || "не указан",  // Используем маршрут из данных stop
                         "segment_info": {
                             "нач.": stop.name,
                             "кон.": stops[index + 1] ? stops[index + 1].name : "Конец маршрута",
@@ -303,20 +305,24 @@
                         }
                     }
                 };
-
                 pointFeatures.push(feature);
             });
 
             geojsonData.features = [...lineStringFeatures, ...pointFeatures];
 
+            let currentDate = new Date().toISOString().slice(0, 10);  // Получаем текущую дату в формате YYYY-MM-DD
+            let fileName = `${city}_${route}_${currentDate}.geojson`;  // Формируем имя файла
+
             let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(geojsonData));
             let downloadAnchorNode = document.createElement('a');
             downloadAnchorNode.setAttribute("href", dataStr);
-            downloadAnchorNode.setAttribute("download", "map_data_with_lines.geojson");
+            downloadAnchorNode.setAttribute("download", fileName);
             document.body.appendChild(downloadAnchorNode);
             downloadAnchorNode.click();
             downloadAnchorNode.remove();
         }
+
+
 
         document.getElementById('save-map').addEventListener('click', saveDataToFile);
 
