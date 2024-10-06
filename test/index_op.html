@@ -31,7 +31,6 @@
         <input type="file" id="geojson-upload" accept=".geojson,.json"/>
         <button id="save-map">Сохранить данные</button>
         <button id="add-stop">Добавить остановку</button>
-        <button id="auto-generate-segment">Авт. форм. сегмента</button>
     </div>
 
     <!-- Таблица остановок -->
@@ -139,65 +138,6 @@
             updateStopMarkers();
             updateStopTable();
         }
-
-        // Функция для автоматического определения сегмента
-        function generateSegmentCoords(startStop, endStop) {
-            let segmentCoords = [];
-
-            // Проходим по всем линиям и находим те, которые находятся между двумя остановками
-            lines.forEach(function(line) {
-                let latlngs = line.latlngs;
-                let startIndex = -1;
-                let endIndex = -1;
-
-                // Ищем индексы точек, которые ближе всего к начальной и конечной остановке
-                latlngs.forEach(function(latlng, index) {
-                    if (isPointNear(latlng, [startStop.lat, startStop.lng]) && startIndex === -1) {
-                        startIndex = index;
-                    }
-                    if (isPointNear(latlng, [endStop.lat, endStop.lng]) && endIndex === -1) {
-                        endIndex = index;
-                    }
-                });
-
-                // Если найдены оба индекса, сохраняем координаты сегмента
-                if (startIndex !== -1 && endIndex !== -1 && startIndex < endIndex) {
-                    segmentCoords = latlngs.slice(startIndex, endIndex + 1);
-                }
-            });
-
-            return segmentCoords;
-        }
-
-        // Функция для проверки, находится ли точка рядом с заданными координатами
-        function isPointNear(point, coords) {
-            const tolerance = 0.0005; // Допустимая погрешность для нахождения точки рядом
-            return Math.abs(point[0] - coords[0]) <= tolerance && Math.abs(point[1] - coords[1]) <= tolerance;
-        }
-
-
-        // Привязка функции к кнопке
-        document.getElementById('auto-generate-segment').addEventListener('click', autoGenerateSegments);
-
-        // Функция для добавления сегмента в таблицу
-        function addSegmentToTable(segmentCoords) {
-            // Проходим по таблице и заполняем сегменты для всех строк
-            for (let i = 0; i < stops.length - 1; i++) {
-                let row = document.getElementById('stop-table').getElementsByTagName('tbody')[0].rows[i];
-                let startStopName = stops[i].name;
-                let endStopName = stops[i + 1].name;
-
-                // Заполняем колонку начальной и конечной остановки
-                row.cells[1].innerHTML = startStopName;
-                row.cells[2].innerHTML = endStopName;
-
-                // Заполняем колонку сегмента
-                row.cells[3].innerHTML = JSON.stringify(generateSegmentCoords(stops[i], stops[i + 1]));
-            }
-        }
-
-        // Привязка функции к кнопке
-        document.getElementById('auto-generate-segment').addEventListener('click', autoGenerateSegments);
 
         // Обновление маркеров на карте без удаления линий
         function updateStopMarkers() {
