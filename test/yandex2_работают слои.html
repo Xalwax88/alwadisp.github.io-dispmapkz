@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Яндекс Карта с маршрутами, сегментами и остановками</title>
+    <title>Яндекс Карта с редактированием и сегментами</title>
     <script src="https://api-maps.yandex.ru/2.1/?lang=ru_RU" type="text/javascript"></script>
     <style>
         #map {
@@ -66,7 +66,11 @@
     </table>
 
     <script>
-        var myMap, stops = [], segmentLines = [], routeLines = [], segmentLayer;
+        var myMap, stops = [], selectedRow = null, segmentCoords = [], currentPolyline = null;
+        var tempMarkers = []; // Временные маркеры для точек сегмента
+        var routeLines = [];  // Линии маршрутов
+        var segmentLines = []; // Линии сегментов (с type: 1)
+        var segmentLayer;  // Слой для сегментов
 
         ymaps.ready(init);
 
@@ -74,7 +78,7 @@
             myMap = new ymaps.Map("map", {
                 center: [54.873583, 69.141639],
                 zoom: 12,
-                controls: ['zoomControl', 'typeSelector', 'fullscreenControl']  // Добавляем стандартные элементы управления
+                controls: ['zoomControl', 'typeSelector', 'fullscreenControl'] // Добавляем стандартные элементы управления
             });
 
             // Создаем слой для сегментов
@@ -101,7 +105,6 @@
 
             myMap.controls.add(toggleSegmentLayerButton);
 
-            // Привязываем события к кнопкам
             document.getElementById('save-map').addEventListener('click', saveDataToFile);
             document.getElementById('edit-line').addEventListener('click', enableLineEditing);
             document.getElementById('save-line').addEventListener('click', saveLineEditing);
@@ -110,7 +113,7 @@
             document.getElementById('geojson-upload').addEventListener('change', loadGeoJSON);
         }
 
-        // Загрузка GeoJSON
+        // Загрузка GeoJSON и отображение объектов на карте
         function loadGeoJSON(event) {
             var file = event.target.files[0];
             var reader = new FileReader();
@@ -120,72 +123,68 @@
                 if (geojsonData.features) {
                     geojsonData.features.forEach(function(feature) {
                         if (feature.geometry.type === 'Point') {
-                            addStop(feature);
-                        } else if (feature.geometry.type === 'LineString') {
-                            addLineString(feature);
+                            var stopCoords = feature.geometry.coordinates;
+                            var stopProperties = feature.properties;
+
+                            var direction = stopProperties.direction || 0;
+                            var color = (direction === 0) ? 'red' : 'blue';
+
+                            var placemark = new ymaps.Placemark([stopCoords[1], stopCoords[0]], {
+                                balloonContent: stopProperties.name || 'Без названия'
+                            }, {
+                                preset: 'islands#circleIcon',
+                                iconColor: color,
+                                draggable: false
+                            });
+
+                            myMap.geoObjects.add(placemark);
+
+                            stops.push({name: stopProperties.name, coords: [stopCoords[1], stopCoords[0]], direction: direction, placemark: placemark});
+                        }
+
+                        if (feature.geometry.type === 'LineString') {
+                            var lineCoords = feature.geometry.coordinates.map(function(coord) {
+                                return [coord[1], coord[0]];
+                            });
+
+                            var direction = feature.properties.direction || 0;
+                            var color;
+
+                            // Определение цвета в зависимости от свойства type
+                            if (feature.properties.type === 0) {
+                                color = (direction === 0) ? '#FF0000' : '#0000FF'; // Маршрут
+                                var polyline = new ymaps.Polyline(lineCoords, {
+                                    balloonContent: 'Маршрут',
+                                    hintContent: 'Направление: ' + (direction === 0 ? 'Прямое' : 'Обратное')
+                                }, {
+                                    strokeColor: color,
+                                    strokeWidth: 4
+                                });
+                                myMap.geoObjects.add(polyline);
+                                routeLines.push(polyline);  // Добавляем в массив маршрутов
+                            } else if (feature.properties.type === 1) {
+                                color = '#FFA500'; // Сегмент
+                                var polyline = new ymaps.Polyline(lineCoords, {
+                                    balloonContent: 'Сегмент',
+                                    hintContent: 'Сегмент с type: 1'
+                                }, {
+                                    strokeColor: color,
+                                    strokeWidth: 4
+                                });
+                                segmentLayer.add(polyline);  // Добавляем сегменты в отдельный слой
+                                segmentLines.push(polyline);  // Добавляем в массив сегментов
+                            }
                         }
                     });
+                    updateStopTable();
                 }
             };
 
             reader.readAsText(file);
         }
 
-        // Добавление остановки
-        function addStop(feature) {
-            var stopCoords = feature.geometry.coordinates;
-            var stopProperties = feature.properties;
-            var direction = stopProperties.direction || 0;
-            var color = (direction === 0) ? 'red' : 'blue';
-
-            var placemark = new ymaps.Placemark([stopCoords[1], stopCoords[0]], {
-                balloonContent: stopProperties.name || 'Без названия'
-            }, {
-                preset: 'islands#circleIcon',
-                iconColor: color,
-                draggable: false  // Отключаем перетаскивание по умолчанию
-            });
-
-            myMap.geoObjects.add(placemark);
-            stops.push({name: stopProperties.name, coords: [stopCoords[1], stopCoords[0]], direction: direction, placemark: placemark});
-        }
-
-        // Добавление линии маршрута или сегмента
-        function addLineString(feature) {
-            var lineCoords = feature.geometry.coordinates.map(function(coord) {
-                return [coord[1], coord[0]];
-            });
-
-            var direction = feature.properties.direction || 0;
-            var color;
-
-            if (feature.properties.type === 0) {
-                color = (direction === 0) ? '#FF0000' : '#0000FF';  // Красный или синий для маршрутов
-                var polyline = new ymaps.Polyline(lineCoords, {
-                    balloonContent: 'Маршрут',
-                    hintContent: 'Маршрут с direction ' + direction
-                }, {
-                    strokeColor: color,
-                    strokeWidth: 4
-                });
-                myMap.geoObjects.add(polyline);  // Добавляем маршруты напрямую на карту
-                routeLines.push(polyline);
-            } else if (feature.properties.type === 1) {
-                color = '#FFA500';  // Оранжевый для сегментов
-                var polyline = new ymaps.Polyline(lineCoords, {
-                    balloonContent: 'Сегмент',
-                    hintContent: 'Сегмент с type: 1'
-                }, {
-                    strokeColor: color,
-                    strokeWidth: 4
-                });
-                segmentLayer.add(polyline);  // Добавляем сегменты в отдельный слой
-                segmentLines.push(polyline);
-            }
-        }
-
-        // Включаем редактирование линий
         function enableLineEditing() {
+            // Включаем редактирование как маршрутов, так и сегментов
             routeLines.forEach(function(line) {
                 line.editor.startEditing();
             });
@@ -194,39 +193,359 @@
             });
         }
 
-        // Сохраняем отредактированные линии
         function saveLineEditing() {
+            // Останавливаем редактирование для всех маршрутов и сегментов
             routeLines.forEach(function(line) {
                 line.editor.stopEditing();
             });
             segmentLines.forEach(function(line) {
                 line.editor.stopEditing();
             });
+            updateStopTable();
             alert("Линии сохранены!");
         }
 
-        // Включаем редактирование остановок
         function enableStopEditing() {
             stops.forEach(function(stop) {
-                stop.placemark.options.set('draggable', true);
+                stop.placemark.options.set('draggable', true);  // Включаем возможность перетаскивания
             });
         }
 
-        // Сохраняем отредактированные остановки
         function saveStopEditing() {
             stops.forEach(function(stop) {
-                stop.placemark.options.set('draggable', false);
+                stop.placemark.options.set('draggable', false);  // Отключаем возможность перетаскивания
                 var newCoords = stop.placemark.geometry.getCoordinates();
                 stop.coords = [newCoords[0], newCoords[1]];
             });
+
+            updateStopTable();
             alert("Остановки сохранены!");
         }
 
-        // Сохраняем данные в файл
-        function saveDataToFile() {
-            alert("Функция сохранения данных еще не реализована.");
+        function updateStopTable() {
+            var stopTable = document.getElementById('stop-table').getElementsByTagName('tbody')[0];
+            stopTable.innerHTML = '';
+
+            stops.forEach(function(stop, index) {
+                var row = stopTable.insertRow();
+                row.insertCell(0).innerHTML = index + 1;
+                row.insertCell(1).innerHTML = stop.name;
+                row.insertCell(2).innerHTML = (index + 1 < stops.length) ? stops[index + 1].name : 'Конец маршрута';
+
+                // Координаты сегмента (пока пусто)
+                var segmentCell = row.insertCell(3);
+                segmentCell.innerHTML = '[]';
+
+                // Создание кнопок для действий
+                var actionCell = row.insertCell(4);
+
+                var autoCalcButton = document.createElement('button');
+                autoCalcButton.innerHTML = "Авто расчет сегмента";
+                autoCalcButton.onclick = function() {
+                    autoCalculateSegment(row);
+                };
+                actionCell.appendChild(autoCalcButton);
+
+                var startButton = document.createElement('button');
+                startButton.innerHTML = "Начать выбор сегмента";
+                startButton.onclick = function() {
+                    selectSegmentRow(row);
+                    startSegmentSelection();
+                };
+                actionCell.appendChild(startButton);
+
+                var finishButton = document.createElement('button');
+                finishButton.innerHTML = "Завершить сегмент";
+                finishButton.onclick = function() {
+                    selectSegmentRow(row);
+                    finalizeSegmentSelection();
+                };
+                actionCell.appendChild(finishButton);
+
+                var deleteButton = document.createElement('button');
+                deleteButton.innerHTML = "Удалить сегмент";
+                deleteButton.onclick = function() {
+                    selectSegmentRow(row);
+                    deleteSegment();
+                };
+                actionCell.appendChild(deleteButton);
+            });
         }
 
+        // Функция для авто расчета сегмента
+        function autoCalculateSegment(row) {
+            var startCoords = stops[row.rowIndex - 1].coords;
+            var endCoords = (row.rowIndex < stops.length) ? stops[row.rowIndex].coords : null;
+
+            if (!endCoords) {
+                alert('Конечная остановка не найдена!');
+                return;
+            }
+
+            // Поиск подходящего сегмента в существующих линиях
+            var foundSegment = null;
+            routeLines.forEach(function(geoObject) {
+                var coords = geoObject.geometry.getCoordinates();
+
+                // Находим координаты между начальной и конечной остановками
+                var startIndex = -1;
+                var endIndex = -1;
+
+                for (var i = 0; i < coords.length; i++) {
+                    if (isCoordsClose(coords[i], startCoords)) {
+                        startIndex = i;
+                    }
+                    if (isCoordsClose(coords[i], endCoords)) {
+                        endIndex = i;
+                    }
+                    if (startIndex !== -1 && endIndex !== -1) {
+                        break;
+                    }
+                }
+
+                if (startIndex !== -1 && endIndex !== -1) {
+                    // Корректный расчет координат между начальной и конечной остановкой
+                    foundSegment = coords.slice(Math.min(startIndex, endIndex), Math.max(startIndex, endIndex) + 1);
+                }
+            });
+
+            if (foundSegment) {
+                // Записываем сегмент в таблицу
+                row.cells[3].innerHTML = JSON.stringify(foundSegment);
+
+                // Создаем новый сегмент и сохраняем его
+                let newSegmentFeature = {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": foundSegment
+                    },
+                    "properties": {
+                        "route": "Маршрут",
+                        "type": 1,  // Сегмент
+                        "segment_info": {
+                            "нач.": stops[row.rowIndex - 1].name,
+                            "кон.": stops[row.rowIndex].name
+                        }
+                    }
+                };
+
+                // Добавляем линию сегмента на карту
+                let segmentLine = new ymaps.Polyline(foundSegment, {}, {
+                    strokeColor: "#00FF00",
+                    strokeWidth: 4
+                });
+                myMap.geoObjects.add(segmentLine);
+                segmentLines.push(segmentLine);  // Сохраняем сегмент для дальнейшего использования
+            } else {
+                alert('Сегмент не найден между выбранными остановками.');
+            }
+        }
+
+        function isCoordsClose(coord1, coord2) {
+            var tolerance = 0.0001;
+            return Math.abs(coord1[0] - coord2[0]) < tolerance && Math.abs(coord1[1] - coord2[1]) < tolerance;
+        }
+
+        function selectSegmentRow(row) {
+            if (selectedRow) {
+                selectedRow.classList.remove('selected');
+            }
+            selectedRow = row;
+            selectedRow.classList.add('selected');
+        }
+
+        function startSegmentSelection() {
+            if (!selectedRow) {
+                alert('Выберите строку сегмента в таблице.');
+                return;
+            }
+
+            segmentCoords = [];
+            clearTempMarkers();
+
+            var startCoords = stops[selectedRow.rowIndex - 1].coords;
+            var endCoords = (selectedRow.rowIndex < stops.length) ? stops[selectedRow.rowIndex].coords : null;
+
+            addMarker(startCoords, 'Начальная остановка');
+            if (endCoords) addMarker(endCoords, 'Конечная остановка');
+
+            alert('Начните выбор точек сегмента на карте.');
+        }
+
+        function finalizeSegmentSelection() {
+            if (!selectedRow || segmentCoords.length === 0) {
+                alert('Выберите хотя бы одну точку сегмента.');
+                return;
+            }
+
+            if (currentPolyline) {
+                currentPolyline.options.set('strokeColor', '#0000FF');
+            }
+
+            selectedRow.cells[3].innerHTML = JSON.stringify(segmentCoords);
+            clearTempMarkers();
+            alert('Сегмент завершен.');
+        }
+
+        myMap.events.add('click', function (e) {
+            if (!selectedRow) {
+                return;
+            }
+
+            var coords = e.get('coords');
+            segmentCoords.push(coords);
+
+            addMarker(coords, 'Точка сегмента');
+        });
+
+        function addMarker(coords, hint) {
+            var marker = new ymaps.Placemark(coords, {
+                hintContent: hint
+            }, {
+                preset: 'islands#circleDotIcon',
+                iconColor: '#FFA500',
+                iconImageSize: [10, 10]
+            });
+
+            myMap.geoObjects.add(marker);
+            tempMarkers.push(marker);
+        }
+
+        function clearTempMarkers() {
+            tempMarkers.forEach(function(marker) {
+                myMap.geoObjects.remove(marker);
+            });
+            tempMarkers = [];
+        }
+
+        function deleteSegment() {
+            if (!selectedRow) {
+                alert('Выберите строку для удаления сегмента.');
+                return;
+            }
+
+            var segmentIndex = selectedRow.rowIndex - 1;
+            if (segmentLines[segmentIndex]) {
+                myMap.geoObjects.remove(segmentLines[segmentIndex]);
+                segmentLines.splice(segmentIndex, 1);
+            }
+
+            selectedRow.cells[3].innerHTML = '[]';
+            clearTempMarkers();
+        }
+
+        // Функция для сохранения данных в GeoJSON файл
+        function saveDataToFile() {
+            let city = "Город";
+            let route = "Маршрут";
+
+            let geojsonData = {
+                "type": "FeatureCollection",
+                "features": []
+            };
+
+            let lineStringFeatures = [];
+            let pointFeatures = [];
+
+            let directionCounter = 0;  // Переменная для отслеживания направления
+
+            // Сохраняем маршруты
+            routeLines.forEach(function(line) {
+                let direction;
+
+                // Устанавливаем значение direction
+                if (directionCounter === 0) {
+                    direction = 0;
+                } else if (directionCounter === 1) {
+                    direction = 1;
+                } else if (directionCounter === 2) {
+                    direction = 2;
+                } else {
+                    direction = 3;
+                }
+
+                let feature = {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": line.geometry.getCoordinates().map(function(latlng) {
+                            return [latlng[1], latlng[0]];  // Преобразование в формат [долгота, широта]
+                        })
+                    },
+                    "properties": {
+                        "route": route,
+                        "type": 0,  // Маршрут
+                        "direction": direction  // Сохраняем direction
+                    }
+                };
+                lineStringFeatures.push(feature);
+                directionCounter++;  // Увеличиваем счетчик направления
+            });
+
+            // Сохраняем сегменты
+            segmentLines.forEach(function(line) {
+                let direction;
+
+                // Устанавливаем значение direction
+                if (directionCounter === 0) {
+                    direction = 0;
+                } else if (directionCounter === 1) {
+                    direction = 1;
+                } else if (directionCounter === 2) {
+                    direction = 2;
+                } else {
+                    direction = 3;
+                }
+
+                let feature = {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": line.geometry.getCoordinates().map(function(latlng) {
+                            return [latlng[1], latlng[0]];  // Преобразование в формат [долгота, широта]
+                        })
+                    },
+                    "properties": {
+                        "route": route,
+                        "type": 1,  // Сегмент
+                        "direction": direction  // Сохраняем direction
+                    }
+                };
+                lineStringFeatures.push(feature);
+                directionCounter++;  // Увеличиваем счетчик направления
+            });
+
+            // Сохраняем остановки
+            stops.forEach(function(stop) {
+                let feature = {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [stop.coords[1], stop.coords[0]]  // Преобразование в формат [долгота, широта]
+                    },
+                    "properties": {
+                        "name": stop.name,
+                        "direction": stop.direction,
+                        "route": route,
+                    }
+                };
+                pointFeatures.push(feature);
+            });
+
+            geojsonData.features = [...lineStringFeatures, ...pointFeatures];
+
+            let currentDate = new Date().toISOString().slice(0, 10);
+            let fileName = `${city}_${route}_${currentDate}.geojson`;
+
+            let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(geojsonData));
+            let downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", fileName);
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+        }
     </script>
 
 </body>
