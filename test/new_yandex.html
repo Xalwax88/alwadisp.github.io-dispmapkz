@@ -8,29 +8,73 @@
     <style>
         #map {
             width: 100%;
-            height: 500px;
+            height: 800px;
+            margin-bottom: 20px;
+            position: sticky; /* Делаем карту "липкой" */
+            top: 0; /* Карта будет "липнуть" к верхней части экрана */
+            z-index: 1000; /* Устанавливаем приоритет по z-оси, чтобы карта была выше остальных элементов */
         }
+
         .controls {
-            position: absolute;
-            top: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
         }
+
+        .controls button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            text-align: center;
+            font-size: 14px;
+            margin: 5px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        .controls button:hover {
+            background-color: #45a049;
+        }
+
         table {
             width: 100%;
-            margin-top: 20px;
             border-collapse: collapse;
+            margin-bottom: 30px;
+            max-height: 400px;
+            overflow-y: auto;
+            display: table;
         }
+
         table, th, td {
-            border: 1px solid black;
+            border: 1px solid #ddd;
         }
         th, td {
-            padding: 10px;
+            padding: 12px;
             text-align: left;
         }
-        .controls {
-            margin-bottom: 15px;
+        th {
+            background-color: #f2f2f2;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 12px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #stop-table-container {
+            transition: max-height 0.3s ease-in-out;
+            overflow: hidden;
         }
     </style>
 </head>
@@ -44,26 +88,29 @@
         <button id="save-line">Сохранить линии</button>
         <button id="edit-stops">Редактировать остановки</button>
         <button id="save-stop">Сохранить остановки</button>
+        <button id="toggle-table">Скрыть таблицу</button>
     </div>
 
     <!-- Карта -->
     <div id="map"></div>
 
-    <!-- Таблица остановок -->
-    <table id="stop-table">
-        <thead>
-            <tr>
-                <th>№</th>
-                <th>Остановка нач сегмента</th>
-                <th>Конец сегмента</th>
-                <th>Сегмент</th>
-                <th>Действие</th>
-            </tr>
-        </thead>
-        <tbody>
-            <!-- Сегменты будут добавлены сюда -->
-        </tbody>
-    </table>
+    <!-- Контейнер для таблицы с остановками -->
+    <div id="stop-table-container">
+        <table id="stop-table">
+            <thead>
+                <tr>
+                    <th>№</th>
+                    <th>Остановка нач сегмента</th>
+                    <th>Конец сегмента</th>
+                    <th>Сегмент</th>
+                    <th>Действие</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Сегменты будут добавлены сюда -->
+            </tbody>
+        </table>
+    </div>
 
     <script>
         var myMap, stops = [], selectedRow = null, segmentCoords = [], currentPolyline = null;
@@ -111,6 +158,21 @@
             document.getElementById('edit-stops').addEventListener('click', enableStopEditing);
             document.getElementById('save-stop').addEventListener('click', saveStopEditing);
             document.getElementById('geojson-upload').addEventListener('change', loadGeoJSON);
+            document.getElementById('toggle-table').addEventListener('click', toggleTableVisibility);
+        }
+
+        // Функция для скрытия/показа таблицы
+        function toggleTableVisibility() {
+            var tableContainer = document.getElementById('stop-table-container');
+            var toggleButton = document.getElementById('toggle-table');
+
+            if (tableContainer.style.maxHeight) {
+                tableContainer.style.maxHeight = null; // Показываем таблицу
+                toggleButton.innerHTML = "Скрыть таблицу";
+            } else {
+                tableContainer.style.maxHeight = "0px"; // Скрываем таблицу
+                toggleButton.innerHTML = "Показать таблицу";
+            }
         }
 
         // Загрузка GeoJSON и отображение объектов на карте
@@ -130,11 +192,25 @@
                             var color = (direction === 0) ? 'red' : 'blue';
 
                             var placemark = new ymaps.Placemark([stopCoords[1], stopCoords[0]], {
-                                balloonContent: stopProperties.name || 'Без названия'
+                                balloonContentHeader: 'Остановка: <input type="text" id="stop-name" value="' + (stopProperties.name || 'Без названия') + '"/>',
+                                balloonContentBody: '<br/>Direction: <select id="stop-direction">' +
+                                                    '<option value="0"' + (direction === 0 ? ' selected' : '') + '>Прямое</option>' +
+                                                    '<option value="1"' + (direction === 1 ? ' selected' : '') + '>Обратное</option>' +
+                                                    '</select>',
+                                balloonContentFooter: '<button onclick="saveStopProperties(\'' + stopProperties.name + '\')">Сохранить</button>'
                             }, {
                                 preset: 'islands#circleIcon',
                                 iconColor: color,
                                 draggable: false
+                            });
+
+                            placemark.events.add('balloonopen', function (e) {
+                                // Здесь можно динамически изменять информацию в балуне при открытии
+                                var stop = stops.find(s => s.placemark === placemark);
+                                if (stop) {
+                                    document.getElementById('stop-name').value = stop.name;
+                                    document.getElementById('stop-direction').value = stop.direction;
+                                }
                             });
 
                             myMap.geoObjects.add(placemark);
@@ -183,6 +259,26 @@
             reader.readAsText(file);
         }
 
+        // Сохранение изменений остановки
+        function saveStopProperties(stopName) {
+            var stop = stops.find(s => s.name === stopName);
+            if (stop) {
+                var newName = document.getElementById('stop-name').value;
+                var newDirection = document.getElementById('stop-direction').value;
+                stop.name = newName;
+                stop.direction = parseInt(newDirection);
+
+                // Обновляем информацию в таблице и на карте
+                updateStopTable();
+                stop.placemark.properties.set({
+                    balloonContentHeader: 'Остановка: ' + newName,
+                    balloonContentBody: '<br/>Direction: ' + (newDirection === '0' ? 'Прямое' : 'Обратное')
+                });
+                stop.placemark.options.set('iconColor', newDirection === '0' ? 'red' : 'blue');
+                alert('Данные остановки обновлены!');
+            }
+        }
+
         function enableLineEditing() {
             // Включаем редактирование как маршрутов, так и сегментов
             routeLines.forEach(function(line) {
@@ -224,7 +320,7 @@
 
         function updateStopTable() {
             var stopTable = document.getElementById('stop-table').getElementsByTagName('tbody')[0];
-            stopTable.innerHTML = '';
+            stopTable.innerHTML = ''; // Очищаем таблицу
 
             stops.forEach(function(stop, index) {
                 var row = stopTable.insertRow();
@@ -355,33 +451,28 @@
             selectedRow.classList.add('selected');
         }
 
-        function startSegmentSelection() {
-            if (!selectedRow) {
-                alert('Выберите строку сегмента в таблице.');
-                return;
-            }
-
-            segmentCoords = [];
-            clearTempMarkers();
-
-            var startCoords = stops[selectedRow.rowIndex - 1].coords;
-            var endCoords = (selectedRow.rowIndex < stops.length) ? stops[selectedRow.rowIndex].coords : null;
-
-            addMarker(startCoords, 'Начальная остановка');
-            if (endCoords) addMarker(endCoords, 'Конечная остановка');
-
-            alert('Начните выбор точек сегмента на карте.');
-        }
-
+        // Новая логика для перезаписи сегмента
         function finalizeSegmentSelection() {
             if (!selectedRow || segmentCoords.length === 0) {
                 alert('Выберите хотя бы одну точку сегмента.');
                 return;
             }
 
-            if (currentPolyline) {
-                currentPolyline.options.set('strokeColor', '#0000FF');
+            // Удаляем старый сегмент (если он есть)
+            var segmentIndex = selectedRow.rowIndex - 1;
+            if (segmentLines[segmentIndex]) {
+                myMap.geoObjects.remove(segmentLines[segmentIndex]);
+                segmentLines[segmentIndex] = null; // Обнуляем старый сегмент
             }
+
+            // Добавляем новый сегмент
+            let newSegment = new ymaps.Polyline(segmentCoords, {}, {
+                strokeColor: "#00FF00",
+                strokeWidth: 4
+            });
+            myMap.geoObjects.add(newSegment);
+
+            segmentLines[segmentIndex] = newSegment; // Заменяем старый сегмент новым
 
             selectedRow.cells[3].innerHTML = JSON.stringify(segmentCoords);
             clearTempMarkers();
