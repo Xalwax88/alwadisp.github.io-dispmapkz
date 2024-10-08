@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Яндекс Карта: Редактирование и Движение Автобуса</title>
+    <title>Яндекс Карта с движением автобуса</title>
     <script src="https://api-maps.yandex.ru/2.1/?lang=ru_RU" type="text/javascript"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js"></script>
     <style>
@@ -40,25 +40,6 @@
         .controls input[type=range] {
             width: 200px;
         }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 30px;
-        }
-
-        table, th, td {
-            border: 1px solid #ddd;
-        }
-
-        th, td {
-            padding: 12px;
-            text-align: left;
-        }
-
-        th {
-            background-color: #f2f2f2;
-        }
     </style>
 </head>
 <body>
@@ -79,9 +60,6 @@
         <label for="timeline">Время:</label>
         <input type="range" id="timeline" min="0" max="100" value="0">
         <span id="current-time">00:00:00</span>
-        <input type="file" id="geojson-upload" accept=".geojson,.json"/>
-        <button id="edit-line">Редактировать линии</button>
-        <button id="save-line">Сохранить линии</button>
     </div>
 
     <!-- Карта -->
@@ -98,8 +76,6 @@
         let currentTimeDisplay = document.getElementById('current-time');
         let traveledRoute = []; // Массив для хранения пройденного маршрута
         let traveledLine = null; // Линия для отображения пройденного пути
-        let segmentLayer = new ymaps.GeoObjectCollection(); // Слой для сегментов и остановок
-        let routeLines = [];  // Линии маршрутов
 
         ymaps.ready(init);
 
@@ -109,9 +85,6 @@
                 zoom: 12,
                 controls: ['zoomControl', 'typeSelector', 'fullscreenControl']
             });
-
-            // Добавляем слой для прорисовки трека автобуса
-            myMap.geoObjects.add(segmentLayer);
 
             document.getElementById('upload-bus-data').addEventListener('click', function() {
                 let input = document.createElement('input');
@@ -125,23 +98,28 @@
                         let data = new Uint8Array(event.target.result);
                         let workbook = XLSX.read(data, {type: 'array'});
 
+                        // Предположим, что данные находятся на первом листе
                         let sheet = workbook.Sheets[workbook.SheetNames[0]];
                         let jsonData = XLSX.utils.sheet_to_json(sheet, {header: 1});
 
                         busRoute = [];
-                        traveledRoute = [];
+                        traveledRoute = []; // Сброс пройденного маршрута
+                        // Извлечение координат и временных меток
                         jsonData.forEach((row, index) => {
                             if (index > 0 && row.length) {
                                 let coords = row[5].split(", ");
                                 let lat = parseFloat(coords[0]);
                                 let lon = parseFloat(coords[1]);
+
+                                // Проверка на нулевые координаты
                                 if (lat !== 0 && lon !== 0) {
-                                    let time = new Date(row[3]);
+                                    let time = new Date(row[3]); // Временная метка движения
                                     busRoute.push({coords: [lat, lon], time: time});
                                 }
                             }
                         });
 
+                        // Обновляем максимальное значение слайдера таймлайна
                         timelineInput.max = busRoute.length - 1;
                     };
                     reader.readAsArrayBuffer(file);
@@ -160,12 +138,15 @@
                 }
 
                 currentPointIndex = parseInt(timelineInput.value);
+
+                // Скорость движения
                 speedMultiplier = parseInt(document.getElementById('speed').value);
 
                 movementInterval = setInterval(function() {
                     if (currentPointIndex < busRoute.length) {
                         let point = busRoute[currentPointIndex];
 
+                        // Обновляем маркер на карте
                         if (!busMarker) {
                             busMarker = new ymaps.Placemark(point.coords, {}, {
                                 preset: 'islands#blueDotIcon'
@@ -175,17 +156,21 @@
                             busMarker.geometry.setCoordinates(point.coords);
                         }
 
+                        // Добавляем текущую точку в пройденный маршрут
                         traveledRoute.push(point.coords);
-                        drawTraveledRoute();
+                        drawTraveledRoute(); // Прорисовка пройденного маршрута
 
+                        // Обновляем слайдер таймлайна
                         timelineInput.value = currentPointIndex;
+
+                        // Обновляем текущее время
                         currentTimeDisplay.textContent = formatTime(point.time);
 
                         currentPointIndex++;
                     } else {
                         clearInterval(movementInterval);
                     }
-                }, 1000 / speedMultiplier);
+                }, 1000 / speedMultiplier); // Интервал времени с учетом множителя скорости
             });
 
             document.getElementById('stop-move').addEventListener('click', function() {
@@ -196,29 +181,26 @@
                 if (busRoute.length > 0) {
                     currentPointIndex = parseInt(this.value);
                     let point = busRoute[currentPointIndex];
+
+                    // Обновляем маркер и текущее время
                     if (busMarker) {
                         busMarker.geometry.setCoordinates(point.coords);
                     }
                     currentTimeDisplay.textContent = formatTime(point.time);
                 }
             });
-
-            // Загрузка и отображение GeoJSON данных
-            document.getElementById('geojson-upload').addEventListener('change', loadGeoJSON);
-
-            document.getElementById('edit-line').addEventListener('click', enableLineEditing);
-            document.getElementById('save-line').addEventListener('click', saveLineEditing);
         }
 
+        // Функция для рисования пройденного маршрута
         function drawTraveledRoute() {
             if (traveledLine) {
-                myMap.geoObjects.remove(traveledLine);
+                myMap.geoObjects.remove(traveledLine); // Удаляем старую линию, если она есть
             }
             traveledLine = new ymaps.Polyline(traveledRoute, {}, {
-                strokeColor: "#000000",
+                strokeColor: "#000000", // Черный цвет линии
                 strokeWidth: 3
             });
-            myMap.geoObjects.add(traveledLine);
+            myMap.geoObjects.add(traveledLine); // Добавляем новую линию на карту
         }
 
         function formatTime(date) {
@@ -226,31 +208,6 @@
             let minutes = date.getMinutes().toString().padStart(2, '0');
             let seconds = date.getSeconds().toString().padStart(2, '0');
             return `${hours}:${minutes}:${seconds}`;
-        }
-
-        // Функции для работы с GeoJSON
-        function loadGeoJSON(event) {
-            let file = event.target.files[0];
-            let reader = new FileReader();
-            reader.onload = function(e) {
-                let geojsonData = JSON.parse(e.target.result);
-                myMap.geoObjects.remove(segmentLayer);
-                segmentLayer = ymaps.geoQuery(geojsonData).addToMap(myMap);
-            };
-            reader.readAsText(file);
-        }
-
-        function enableLineEditing() {
-            routeLines.forEach(function(line) {
-                line.editor.startEditing();
-            });
-        }
-
-        function saveLineEditing() {
-            routeLines.forEach(function(line) {
-                line.editor.stopEditing();
-            });
-            alert("Линии сохранены!");
         }
     </script>
 
