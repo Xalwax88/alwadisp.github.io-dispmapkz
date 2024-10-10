@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoJSON Converter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        h2 {
+            color: #333;
+        }
+
+        a {
+            color: #337ab7;
+            text-decoration: none;
+            margin-bottom: 20px;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        form {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            width: 80%; /* Ширина формы занимает 80% экрана */
+            max-width: 800px; /* Максимальная ширина формы */
+            box-sizing: border-box;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        input[type="text"],
+        textarea {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        textarea {
+            height: 300px; /* Высота текстового поля */
+            resize: vertical; /* Позволяет изменять высоту вручную */
+        }
+
+        button {
+            background-color: #5cb85c;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            text-align: center;
+            display: block;
+            width: 100%;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #4cae4c;
+        }
+
+        .footer-link {
+            margin-top: 20px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Welcome, {{ current_user.id }}</h2>
+    <a href="{{ url_for('logout') }}">Logout</a>
+
+    <form method="POST">
+        <label for="city_name">City Name:</label>
+        <input type="text" id="city_name" name="city_name" required>
+
+        <label for="route_name">Route Name:</label>
+        <input type="text" id="route_name" name="route_name" required>
+
+        <label for="file_content">File Content:</label>
+        <textarea id="file_content" name="file_content" required></textarea>
+
+        <button type="submit">Convert to GeoJSON</button>
+    </form>
+
+    <div class="footer-link">
+        <a href="https://xalwax88.github.io/alwadisp.github.io-dispmapkz/">Загрузить маршрут</a>
+    </div>
+
+</body>
+</html>
