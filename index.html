@@ -183,13 +183,22 @@
             reader.onload = function(e) {
                 var geojsonData = JSON.parse(e.target.result);
                 if (geojsonData.features) {
-                    geojsonData.features.forEach(function(feature) {
+                    geojsonData.features.forEach(function(feature, index) {
                         if (feature.geometry.type === 'Point') {
                             var stopCoords = feature.geometry.coordinates;
                             var stopProperties = feature.properties;
 
                             var direction = stopProperties.direction || 0;
-                            var color = (direction === 0) ? 'red' : 'blue';
+                            var color;
+
+                            // Помечаем первую остановку зеленым, а последнюю желтым
+                            if (index === 0) {
+                                color = 'green'; // Начальная остановка
+                            } else if (index === geojsonData.features.length - 1) {
+                                color = 'yellow'; // Конечная остановка
+                            } else {
+                                color = (direction === 0) ? 'red' : 'blue'; // Обычные остановки
+                            }
 
                             var placemark = new ymaps.Placemark([stopCoords[1], stopCoords[0]], {
                                 balloonContentHeader: 'Остановка: <input type="text" id="stop-name" value="' + (stopProperties.name || 'Без названия') + '"/>',
@@ -200,7 +209,7 @@
                                 balloonContentFooter: '<button onclick="saveStopProperties(\'' + stopProperties.name + '\')">Сохранить</button>'
                             }, {
                                 preset: 'islands#circleIcon',
-                                iconColor: color,
+                                iconColor: color, // Применяем цвет, основанный на позиции остановки
                                 draggable: false
                             });
 
@@ -256,8 +265,9 @@
                 }
             };
 
-            reader.readAsText(file);
-        }
+    reader.readAsText(file);
+}
+
 
         // Сохранение изменений остановки
         function saveStopProperties(stopName) {
